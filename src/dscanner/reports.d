@@ -243,3 +243,154 @@ class SonarQubeGenericIssueDataReporter
 		}
 	}
 }
+
+class CodeClimateGenericIssueDataReporter
+{
+	enum Type
+	{
+		bug = "Bug Risk",
+		vulnerability = "Security",
+		codeSmell = "Style"
+	}
+
+	enum Severity
+	{
+		blocker = "blocker",
+		critical = "critical",
+		major = "major",
+		minor = "minor",
+		info = "info"
+	}
+
+	struct Issue
+	{
+		string type;
+		string check_name;
+		string description;
+		string content;
+		string[] categories;
+		Location location;
+		int remediation_points;
+		string severity;
+	}
+
+	struct Location
+	{
+		string path;
+		size_t line;
+		size_t column;
+	}
+
+	private Appender!(Issue[]) _issues;
+
+	this()
+	{
+		_issues = appender!(Issue[]);
+	}
+
+	void addMessageSet(MessageSet messageSet)
+	{
+		_issues ~= toIssues(messageSet);
+	}
+
+	void addMessage(Message message, bool isError = false)
+	{
+		_issues ~= toIssue(message, isError);
+	}
+
+	string getContent()
+	{
+		JSONValue result = JSONValue(_issues.data.map!(e => toJson(e)).array);
+		return result.toPrettyString();
+	}
+
+	private static JSONValue toJson(Issue issue)
+	{
+		// dfmt off
+		return JSONValue([
+			"type": JSONValue("issue"),
+			"check_name": JSONValue(issue.check_name),
+			"description": JSONValue(issue.description),
+			"content": JSONValue(["body": issue.content]),
+			"categories": JSONValue(issue.categories.map!(c => JSONValue(c)).array),
+			"location": JSONValue([
+				"path": JSONValue(issue.location.path),
+				"lines": JSONValue([
+					"begin": JSONValue([
+						"line": JSONValue(issue.location.line),
+						"column": JSONValue(issue.location.column)
+					])
+				]),
+			]),
+			// "remediation_points": JSONValue(issue.remediation_points),
+			"severity": JSONValue(issue.severity)
+		]);
+		// dfmt on
+	}
+
+	private static Issue[] toIssues(MessageSet messageSet)
+	{
+		return messageSet[].map!(e => toIssue(e)).array;
+	}
+
+	private static Issue toIssue(Message message, bool isError = false)
+	{
+		// dfmt off
+		Issue issue = {
+			type : "issue",
+			check_name : message.checkName,
+			description : message.message,
+			content : message.key,
+			categories : getCategories(message.key),
+			severity : (isError) ? Severity.blocker : getSeverity(message.key),
+			location : getPrimaryLocation(message)
+		};
+		// dfmt on
+		return issue;
+	}
+
+	private static Location getPrimaryLocation(Message message)
+	{
+		return Location(message.fileName, message.line, message.column);
+	}
+
+	private static string getSeverity(string key)
+	{
+		auto a = key.split(".");
+
+		if (a.length <= 1)
+		{
+			return Severity.major;
+		}
+		else
+		{
+			switch (a[1])
+			{
+				case "style":
+					return Severity.minor;
+				default:
+					return Severity.major;
+			}
+		}
+	}
+
+	private static string[] getCategories(string key)
+	{
+		auto a = key.split(".");
+
+		if (a.length <= 1)
+		{
+			return [Type.bug];
+		}
+		else
+		{
+			switch (a[1])
+			{
+				case "style":
+					return [Type.codeSmell];
+				default:
+					return [Type.bug];
+			}
+		}
+	}
+}

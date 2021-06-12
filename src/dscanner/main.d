@@ -257,6 +257,9 @@ else
 				case "sonarQubeGenericIssueData":
 					generateSonarQubeGenericIssueDataReport(expandArgs(args), config, cache, moduleCache, reportFile);
 					break;
+				case "codeClimate":
+					generateCodeClimateIssueDataReport(expandArgs(args), config, cache, moduleCache, reportFile);
+					break;
 			}
 		}
 		else

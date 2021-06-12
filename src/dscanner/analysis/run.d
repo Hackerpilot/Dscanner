@@ -90,7 +90,7 @@ import dsymbol.conversion.second;
 import dsymbol.modulecache : ModuleCache;
 
 import dscanner.utils;
-import dscanner.reports : DScannerJsonReporter, SonarQubeGenericIssueDataReporter;
+import dscanner.reports : CodeClimateGenericIssueDataReporter, DScannerJsonReporter, SonarQubeGenericIssueDataReporter;
 
 bool first = true;
 
@@ -205,6 +205,42 @@ void generateSonarQubeGenericIssueDataReport(string[] fileNames, const StaticAna
 		const(Token)[] tokens;
 		const Module m = parseModule(fileName, code, &r, cache, tokens, writeMessages, null, null, null);
 		MessageSet messageSet = analyze(fileName, m, config, moduleCache, tokens, true);
+		reporter.addMessageSet(messageSet);
+	}
+
+	string reportFileContent = reporter.getContent();
+	if (reportFile == "")
+	{
+		writeln(reportFileContent);
+	}
+	else
+	{
+		mkdirRecurse(reportFile.dirName);
+		toFile(reportFileContent, reportFile);
+	}
+}
+
+void generateCodeClimateIssueDataReport(string[] fileNames, const StaticAnalysisConfig config,
+		ref StringCache cache, ref ModuleCache moduleCache, string reportFile = "")
+{
+	auto reporter = new CodeClimateGenericIssueDataReporter();
+
+	auto writeMessages = delegate void(string fileName, size_t line, size_t column, string message, bool isError){
+		reporter.addMessage(Message(fileName, line, column, "dscanner.syntax", message), isError);
+	};
+
+	foreach (fileName; fileNames)
+	{
+		auto code = readFile(fileName);
+		// Skip files that could not be read and continue with the rest
+		if (code.length == 0)
+			continue;
+		RollbackAllocator r;
+		const(Token)[] tokens;
+
+		const Module m = parseModule(fileName, code, &r, cache, tokens, writeMessages, null, null, null);
+		MessageSet messageSet = analyze(fileName, m, config, moduleCache, tokens, true);
+
 		reporter.addMessageSet(messageSet);
 	}
 
